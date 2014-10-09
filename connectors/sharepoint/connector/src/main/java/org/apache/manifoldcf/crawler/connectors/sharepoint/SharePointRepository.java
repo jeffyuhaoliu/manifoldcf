@@ -1581,7 +1581,7 @@ public class SharePointRepository extends org.apache.manifoldcf.crawler.connecto
                   // Fetch and index.  This also filters documents based on output connector restrictions.
                   String fileUrl = serverUrl + encodePath(url);
                   String fetchUrl = fileUrl;
-                  if (!fetchAndIndexFile(activities, documentIdentifier, version, fileUrl, fetchUrl,
+                  if (!fetchAndIndexFileMetadataOnly(activities, documentIdentifier, version, fileUrl, fetchUrl,
                     accessTokens, denyTokens, createdDate, modifiedDate, null, guid, sDesc))
                   {
                     // Document not indexed for whatever reason
@@ -1771,7 +1771,7 @@ public class SharePointRepository extends org.apache.manifoldcf.crawler.connecto
               }
 
               // Fetch and index.  This also filters documents based on output connector restrictions.
-              if (!fetchAndIndexFile(activities, documentIdentifier, version, fileUrl, serverUrl + encodedServerLocation + encodedDocumentPath,
+              if (!fetchAndIndexFileMetadataOnly(activities, documentIdentifier, version, fileUrl, serverUrl + encodedServerLocation + encodedDocumentPath,
                 acls, denyAcls, createdDate, modifiedDate, metadataValues, guid, sDesc))
               {
                 // Document not indexed for whatever reason
@@ -2078,6 +2078,87 @@ public class SharePointRepository extends org.apache.manifoldcf.crawler.connecto
         catch (IOException e)
         {
           throw new ManifoldCFException("IO error writing '"+fileUrl+"' to temporary file: "+e.getMessage(),e);
+        }
+      }
+      else
+      {
+        // Mime type failed
+        if (Logging.connectors.isDebugEnabled())
+          Logging.connectors.debug("SharePoint: Skipping document '"+documentIdentifier+"' because output connector says mime type '"+((contentType==null)?"null":contentType)+"' is not indexable");
+        return false;
+      }
+    }
+    else
+    {
+      // URL failed
+      if (Logging.connectors.isDebugEnabled())
+        Logging.connectors.debug("SharePoint: Skipping document '"+documentIdentifier+"' because output connector says URL '"+fileUrl+"' is not indexable");
+      return false;
+    }
+  }
+
+  /** Method that fetches and indexes a file fetched from a SharePoint URL, with appropriate error handling
+  * etc.
+  */
+  protected boolean fetchAndIndexFileMetadataOnly(IProcessActivity activities, String documentIdentifier, String version,
+    String fileUrl, String fetchUrl, ArrayList acls, ArrayList denyAcls, Date createdDate, Date modifiedDate,
+    Map<String,String> metadataValues, String guid, SystemMetadataDescription sDesc)
+    throws ManifoldCFException, ServiceInterruption
+  {
+    // Before we fetch, confirm that the output connector will accept the document
+    if (activities.checkURLIndexable(fileUrl))
+    {
+      // Also check mime type
+      String contentType = mapExtensionToMimeType(documentIdentifier);
+      if (activities.checkMimeTypeIndexable(contentType))
+      {
+        try
+        {
+          // Ingest the document's metadata
+          // Set empty input stream because we don't want to get the file binary from SharePoint
+          InputStream is = new ByteArrayInputStream(new byte[0]);
+          RepositoryDocument data = new RepositoryDocument();
+          data.setBinary( is, 0L );
+          
+          data.setFileName(mapToFileName(documentIdentifier));
+                    
+          if (contentType != null)
+            data.setMimeType(contentType);
+          
+          setDataACLs(data,acls,denyAcls);
+
+          setPathAttribute(data,sDesc,documentIdentifier);
+                    
+          if (modifiedDate != null)
+            data.setModifiedDate(modifiedDate);
+          if (createdDate != null)
+            data.setCreatedDate(createdDate);
+
+          if (metadataValues != null)
+          {
+            Iterator<String> iter = metadataValues.keySet().iterator();
+            while (iter.hasNext())
+            {
+              String fieldName = iter.next();
+              String fieldData = metadataValues.get(fieldName);
+              data.addField(fieldName,fieldData);
+            }
+          }
+          data.addField("GUID",guid);
+          
+          try
+          {
+            activities.ingestDocumentWithException( documentIdentifier, version, fileUrl , data );
+          }
+          catch (IOException e)
+          {
+            handleIOException(e,"reading document");
+          }
+          return true;
+        }
+        catch (Exception e)
+        {
+          throw new ManifoldCFException("Something went wrong: " + e.getMessage(), e);
         }
       }
       else
