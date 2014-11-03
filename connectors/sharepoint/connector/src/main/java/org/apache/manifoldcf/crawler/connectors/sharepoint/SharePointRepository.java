@@ -1494,10 +1494,25 @@ public class SharePointRepository extends org.apache.manifoldcf.crawler.connecto
                     RepositoryDocument data = new RepositoryDocument();
                     data.setBinary( is, 0L );
 
-                    if (modifiedDate != null)
+                    data.addField("type", "text/html"); // type
+                    if (modifiedDate != null) {
                       data.setModifiedDate(modifiedDate);
-                    if (createdDate != null)
+                      data.addField("date", modifiedDate); // date
+                    }
+                    if (createdDate != null) {
                       data.setCreatedDate(createdDate);
+                      data.addField("lastModified", modifiedDate); // lastModified
+                    }
+                    data.addField("tstamp", new Date()); // tstamp
+                    data.addField("url", itemUrl); // url
+                    try {
+                      URL urlObj = new URL(itemUrl);
+                      data.addField("host", urlObj.getHost()); // host
+                    }
+                    catch (MalformedURLException e)
+                    {
+                      throw new ManifoldCFException("Item URL is malformed, " + itemUrl);
+                    }
                     
                     setDataACLs(data,acls,denyAcls);
                     
@@ -2122,17 +2137,27 @@ public class SharePointRepository extends org.apache.manifoldcf.crawler.connecto
           
           data.setFileName(mapToFileName(documentIdentifier));
                     
-          if (contentType != null)
+          if (contentType != null) {
             data.setMimeType(contentType);
+            data.addField("type", contentType); // type
+          }
           
           setDataACLs(data,acls,denyAcls);
 
           setPathAttribute(data,sDesc,documentIdentifier);
                     
-          if (modifiedDate != null)
+          if (modifiedDate != null) {
             data.setModifiedDate(modifiedDate);
-          if (createdDate != null)
+            data.addField("date", modifiedDate); // date
+          }
+          if (createdDate != null) {
             data.setCreatedDate(createdDate);
+            data.addField("lastModified", modifiedDate); // lastModified
+          }
+          data.addField("tstamp", new Date()); // tstamp
+          data.addField("url", fileUrl); // url
+          URL urlObj = new URL(fileUrl);
+          data.addField("host", urlObj.getHost()); // host
 
           if (metadataValues != null)
           {
